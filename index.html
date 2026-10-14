@@ -1117,3 +1117,188 @@ function confirmDeleteLedger(id){
         <button class="btn btn-outline" onclick="closeSheet()">Cancel</button>
         <button class="btn btn-danger" onclick="deleteLedger('${id}')">Delete</button>
       </div>
+    </div>`;
+  openSheet(html, {center:true});
+}
+function deleteLedger(id){
+  DB.transactions = DB.transactions.filter(t=>t.ledgerId!==id);
+  DB.ledgers = DB.ledgers.filter(l=>l.id!==id);
+  if(UI.ledgerFilter===id) UI.ledgerFilter='all';
+  save(); closeSheet(); render(); showToast('Ledger deleted');
+}
+
+/* ============================= TRANSACTIONS ============================= */
+function openAddTransaction(){
+  const biz = activeBusiness();
+  const ledgers = bizLedgers(biz.id);
+  if(!ledgers.length){ showToast('Create a ledger first'); return; }
+  const html = `
+    <div class="sheet-head"><div class="sheet-title">New Entry</div><div class="icon-btn" onclick="closeSheet()">✕</div></div>
+    <div class="sheet-body">
+      <div class="field"><label>Ledger</label>
+        <select id="f_tledger">${ledgers.map(l=>`<option value="${l.id}" ${l.id===UI.ledgerFilter?'selected':''}>${escapeHtml(l.name)}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Type</label>
+        <select id="f_ttype"><option value="in">Cash In</option><option value="out">Cash Out</option></select>
+      </div>
+      <div class="field"><label>Amount *</label><input type="number" id="f_tamount" placeholder="0" inputmode="numeric"></div>
+      <div class="field"><label>Date</label><input type="date" id="f_tdate" value="${todayStr()}"></div>
+      <div class="field"><label>Category</label><input type="text" id="f_tcategory" placeholder="e.g. Purchase, Sales, Wages"></div>
+      <div class="field"><label>Remark (optional)</label><input type="text" id="f_tremark" placeholder="Notes about this entry"></div>
+      <button class="btn btn-primary" onclick="saveTransaction(null)">Add Entry</button>
+    </div>`;
+  openSheet(html);
+}
+function saveTransaction(id){
+  const ledgerId = document.getElementById('f_tledger').value;
+  const type = document.getElementById('f_ttype').value;
+  const amount = parseFloat(document.getElementById('f_tamount').value);
+  if(!amount || amount<=0){ showToast('Enter a valid amount'); return; }
+  const date = document.getElementById('f_tdate').value || todayStr();
+  const category = document.getElementById('f_tcategory').value.trim() || (type==='in'?'Sales':'Purchase');
+  const remark = document.getElementById('f_tremark').value.trim();
+  const biz = activeBusiness();
+  if(id){
+    const t = DB.transactions.find(x=>x.id===id);
+    Object.assign(t, {ledgerId, type, amount, date, category, remark});
+    showToast('Entry updated');
+  } else {
+    DB.transactions.push({id:uid('txn'), businessId:biz.id, ledgerId, type, amount, date, time:nowTimeStr(), category, remark, createdAt:Date.now()});
+    showToast('Entry added');
+  }
+  save(); closeSheet(); render();
+}
+function openTxnDetail(id){
+  const t = DB.transactions.find(x=>x.id===id);
+  if(!t) return;
+  const ledger = ledgerById(t.ledgerId);
+  const party = t.partyId ? partyById(t.partyId) : null;
+  const html = `
+    <div class="sheet-head"><div class="sheet-title">Entry Details</div><div class="icon-btn" onclick="closeSheet()">✕</div></div>
+    <div class="sheet-body">
+      <div style="text-align:center; margin-bottom:16px;">
+        <div style="font-family:var(--font-display); font-weight:800; font-size:28px; color:${t.type==='in'?'var(--green)':'var(--red)'}">${t.type==='out'?'-':'+'}${fmtAmt(t.amount)}</div>
+        <div class="txn-meta">${t.type==='in'?'Cash In':'Cash Out'}</div>
+      </div>
+      <div style="background:var(--card); border:1px solid var(--border-soft); border-radius:var(--radius-md); padding:6px 14px;">
+        <div class="kv-row"><div class="k">Ledger</div><div class="v">${escapeHtml(ledger?ledger.name:'—')}</div></div>
+        <div class="kv-row"><div class="k">Date</div><div class="v">${fmtDate(t.date)}</div></div>
+        <div class="kv-row"><div class="k">Time</div><div class="v">${escapeHtml(t.time||'—')}</div></div>
+        <div class="kv-row"><div class="k">Category</div><div class="v">${escapeHtml(t.category||'—')}</div></div>
+        <div class="kv-row"><div class="k">Party</div><div class="v">${escapeHtml(party?party.name:'—')}</div></div>
+        <div class="kv-row"><div class="k">Remark</div><div class="v">${escapeHtml(t.remark||'—')}</div></div>
+      </div>
+      <div class="btn-row" style="margin-top:14px;">
+        <button class="btn btn-outline" onclick="closeSheet()">Close</button>
+        <button class="btn btn-danger" onclick="deleteTxn('${t.id}')">Delete</button>
+      </div>
+    </div>`;
+  openSheet(html, {center:true});
+}
+function deleteTxn(id){
+  DB.transactions = DB.transactions.filter(t=>t.id!==id);
+  save(); closeSheet(); render(); showToast('Entry deleted');
+}
+
+/* ============================= PARTIES ============================= */
+function openAddParty(){
+  const html = `
+    <div class="sheet-head"><div class="sheet-title">Add Party</div><div class="icon-btn" onclick="closeSheet()">✕</div></div>
+    <div class="sheet-body">
+      <div class="field"><label>Name *</label><input type="text" id="f_pname" placeholder="e.g. Rahat Fashion House"></div>
+      <div class="field"><label>Type</label>
+        <select id="f_ptype"><option value="customer">Customer</option><option value="supplier">Supplier</option><option value="contractor">Contractor</option></select>
+      </div>
+      <div class="field"><label>Phone (optional)</label><input type="text" id="f_pphone" placeholder="+91..."></div>
+      <button class="btn btn-primary" onclick="saveParty(null)">Add Party</button>
+    </div>`;
+  openSheet(html);
+}
+function saveParty(id){
+  const name = document.getElementById('f_pname').value.trim();
+  if(!name){ showToast('Party name is required'); return; }
+  const type = document.getElementById('f_ptype').value;
+  const phone = document.getElementById('f_pphone').value.trim();
+  const biz = activeBusiness();
+  if(id){
+    Object.assign(partyById(id), {name, type, phone});
+    showToast('Party updated');
+  } else {
+    DB.parties.push({id:uid('party'), businessId:biz.id, name, type, phone, createdAt:Date.now()});
+    showToast('Party added');
+  }
+  save(); closeSheet(); render();
+}
+function openPartyDetail(id){
+  const p = partyById(id);
+  if(!p) return;
+  const bal = partyBalance(p.id);
+  const txns = DB.partyTxns.filter(t=>t.partyId===id).sort((a,b)=> (b.date||'').localeCompare(a.date||'') || b.createdAt-a.createdAt);
+  const html = `
+    <div class="sheet-head"><div class="sheet-title">${escapeHtml(p.name)}</div><div class="icon-btn" onclick="closeSheet()">✕</div></div>
+    <div class="sheet-body">
+      <div style="text-align:center; margin-bottom:16px;">
+        <div style="font-family:var(--font-display); font-weight:800; font-size:24px; color:${bal>=0?'var(--green)':'var(--red)'}">${fmtAmt(Math.abs(bal))}</div>
+        <div class="txn-meta">${bal>=0?'You Get':'You Give'}</div>
+      </div>
+      <div style="background:var(--card); border:1px solid var(--border-soft); border-radius:var(--radius-md); padding:6px 14px; margin-bottom:14px;">
+        <div class="kv-row"><div class="k">Type</div><div class="v">${escapeHtml(p.type)}</div></div>
+        <div class="kv-row"><div class="k">Phone</div><div class="v">${escapeHtml(p.phone||'—')}</div></div>
+      </div>
+      <div class="section-title" style="margin-top:8px;">Transactions</div>
+      <div class="row-list">
+        ${txns.length? txns.map(t=>`
+          <div class="txn-row" style="cursor:default;">
+            <div class="txn-dot ${t.type==='you_got'?'in':'out'}">${t.type==='you_got'?ICONS.down.replace('<svg','<svg style="width:17px;height:17px; transform:rotate(90deg) scaleX(-1);"'):ICONS.up.replace('<svg','<svg style="width:17px;height:17px;"')}</div>
+            <div class="txn-info"><div class="txn-name">${escapeHtml(t.remark||'Entry')}</div><div class="txn-meta">${fmtDate(t.date)}</div></div>
+            <div class="txn-amt"><div class="amt ${t.type==='you_got'?'in':'out'}">${t.type==='you_got'?'+':'-'}${fmtAmt(t.amount)}</div><div class="lbl">${t.type==='you_got'?'You Got':'You Gave'}</div></div>
+          </div>`).join('') : `<div class="empty-state"><div class="em-s">No transactions yet</div></div>`}
+      </div>
+      <div class="btn-row" style="margin-top:14px;">
+        <button class="btn btn-outline" onclick="closeSheet()">Close</button>
+        <button class="btn btn-danger" onclick="deleteParty('${p.id}')">Delete Party</button>
+      </div>
+    </div>`;
+  openSheet(html, {center:true});
+}
+function deleteParty(id){
+  DB.parties = DB.parties.filter(p=>p.id!==id);
+  DB.partyTxns = DB.partyTxns.filter(t=>t.partyId!==id);
+  save(); closeSheet(); render(); showToast('Party deleted');
+}
+
+/* ============================= PIN LOCK ============================= */
+function openSetPin(){
+  const html = `
+    <div class="sheet-head"><div class="sheet-title">Set App PIN</div><div class="icon-btn" onclick="closeSheet()">✕</div></div>
+    <div class="sheet-body">
+      <p style="color:var(--text-dim); font-size:14px; line-height:1.6;">Enter a 4-digit PIN to protect your data. You'll need this PIN each time you open the app.</p>
+      <div class="field"><label>4-Digit PIN *</label><input type="password" id="f_pin" maxlength="4" inputmode="numeric" placeholder="••••"></div>
+      <button class="btn btn-primary" onclick="savePin()">Set PIN</button>
+    </div>`;
+  openSheet(html, {center:true});
+}
+function savePin(){
+  const pin = document.getElementById('f_pin').value.trim();
+  if(!/^\d{4}$/.test(pin)){ showToast('PIN must be 4 digits'); return; }
+  DB.settings.pinLock = true;
+  DB.settings.pin = pin;
+  save(); closeSheet(); render(); showToast('App lock enabled');
+}
+
+/* ============================= BOOTSTRAP ============================= */
+if(!window.storage){
+  window.storage = {
+    get: async (key) => { try { const v = localStorage.getItem(key); return v ? {value: v} : null; } catch(e){ return null; } },
+    set: async (key, value) => { try { localStorage.setItem(key, value); } catch(e){} }
+  };
+}
+(async function init(){
+  await loadData();
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('loader').style.display = 'none';
+  render();
+})();
+</script>
+</body>
+</html>
